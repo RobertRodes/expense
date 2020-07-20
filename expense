@@ -1,0 +1,32 @@
+#! /usr/bin/env ruby
+
+require 'pg'
+require_relative 'sql_print'
+
+def show_help
+  puts <<~HELP 
+    $ ./expense
+    An expense recording system
+
+    Commands:
+
+    add AMOUNT MEMO [DATE] - record a new expense
+    clear - delete all expenses
+    list - list all expenses
+    delete NUMBER - remove expense with id NUMBER
+    search QUERY - list expenses with a matching memo field
+    HELP
+end
+
+def list_expenses
+  cn = PG.connect(dbname: 'expense')
+  rs = cn.exec('SELECT amount, memo FROM expenses;')
+  sql_print rs
+end
+
+# puts ARGV[0].nil?
+
+case ARGV[0]
+  when 'list' then list_expenses
+  else show_help
+end
