@@ -18,15 +18,36 @@ def show_help
     HELP
 end
 
+def add_expenses
+  return 'You must provide an amount and a memo.' unless ARGV[1] && ARGV[2]
+  sql = <<~SQL
+  INSERT INTO expenses (amount, memo, created_on)
+    VALUES (
+      #{ARGV[1]}, 
+      '#{ARGV[2].gsub('\'', '\'\'')}', 
+      #{ARGV[3].nil? ? 'DEFAULT' : '\'' + ARGV[3] + '\''}
+    );
+  SQL
+  cn = PG.connect(dbname: 'expense')
+  begin
+    cn.exec(sql)
+  rescue => err
+    return 'Invalid date' if err.class.to_s =~ /date/i
+    raise err
+  end
+  'INSERT succeeded'
+end
+
 def list_expenses
   cn = PG.connect(dbname: 'expense')
-  rs = cn.exec('SELECT amount, memo FROM expenses;')
+  rs = cn.exec('SELECT * FROM expenses;')
   sql_print rs
 end
 
-# puts ARGV[0].nil?
-
-case ARGV[0]
-  when 'list' then list_expenses
+case ARGV.first
+  when 'list' then 
+    list_expenses
+  when 'add' then 
+    puts add_expenses
   else show_help
 end
