@@ -2,52 +2,98 @@
 
 require 'pg'
 require_relative 'sql_print'
-
-def show_help
-  puts <<~HELP 
-    $ ./expense
-    An expense recording system
-
-    Commands:
-
-    add AMOUNT MEMO [DATE] - record a new expense
-    clear - delete all expenses
-    list - list all expenses
-    delete NUMBER - remove expense with id NUMBER
-    search QUERY - list expenses with a matching memo field
-    HELP
-end
-
-def add_expenses
-  return 'You must provide an amount and a memo.' unless ARGV[1] && ARGV[2]
-  sql = <<~SQL
-  INSERT INTO expenses (amount, memo, created_on)
-    VALUES (
-      #{ARGV[1]}, 
-      '#{ARGV[2].gsub('\'', '\'\'')}', 
-      #{ARGV[3].nil? ? 'DEFAULT' : '\'' + ARGV[3] + '\''}
-    );
-  SQL
-  cn = PG.connect(dbname: 'expense')
-  begin
-    cn.exec(sql)
-  rescue => err
-    return 'Invalid date' if err.class.to_s =~ /date/i
-    raise err
+require 'pry'
+class CLI
+  def initialize(args)
+    @args = *args
+    @ed = ExpenseData.new
   end
-  'INSERT succeeded'
+
+  def run
+    case @args.first
+      when 'list' then 
+        @ed.list_expenses
+      when 'add' then 
+        # binding.pry
+        @ed.add_expenses(@args[1..-1])
+      when 'search' then
+        @ed.search_expenses(@args[1])
+      else show_help
+    end
+  end
+
+  private
+
+  def show_help
+    puts <<~HELP 
+      $ ./expense
+      An expense recording system
+
+      Commands:
+
+      add AMOUNT MEMO [DATE] - record a new expense
+      clear - delete all expenses
+      list - list all expenses
+      delete NUMBER - remove expense with id NUMBER
+      search QUERY - list expenses with a matching memo field
+      HELP
+  end
 end
 
-def list_expenses
-  cn = PG.connect(dbname: 'expense')
-  rs = cn.exec('SELECT * FROM expenses;')
-  sql_print rs
+class ExpenseData
+  def initialize
+    @cn = PG.connect(dbname: 'expense')
+  end
+
+  def add_expenses(args)
+    unless args[0] && args[1]
+      puts 'You must provide an amount and a memo.' 
+      return
+    end
+    begin
+      @cn.exec_params(
+        "INSERT INTO expenses (amount, memo, created_on) " \
+        "VALUES ($1, $2, #{args[2].nil? ? 'DEFAULT' : '$3'})",
+        args
+      )
+    rescue => err
+      raise err unless handle_error(err)
+      return
+    end
+    puts 'INSERT succeeded'
+  end
+
+  def list_expenses
+    rs = @cn.exec(
+      'SELECT id, created_on, amount, memo FROM expenses ORDER BY created_on;'
+    )
+    sql_print rs
+  end
+
+  def search_expenses(arg)
+    arg = "%#{arg}%"
+    rs = @cn.exec_params(
+      'SELECT id, created_on, amount, memo ' \
+      'FROM expenses WHERE memo ILIKE $1 ORDER BY created_on',
+      [arg]
+    )
+    sql_print rs
+  end
+
+  private
+
+  def handle_error(err)
+    case err
+    when PG::InvalidTextRepresentation
+      puts 'Ivalid amount value'
+    when PG::NumericValueOutOfRange
+      puts 'Amount must be a value from 0.01 to 9999.99'
+    when PG::InvalidDatetimeFormat
+      puts 'Invalid date stamp value' 
+    else return false
+    end
+    true
+  end
 end
 
-case ARGV.first
-  when 'list' then 
-    list_expenses
-  when 'add' then 
-    puts add_expenses
-  else show_help
-end
+CLI.new(ARGV).run

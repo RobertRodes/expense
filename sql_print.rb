@@ -3,7 +3,7 @@ def rs_col_widths(rs, rs_size)
   rs_size.times do |idx|
     widths << [
       rs.fields[idx].size,
-      rs.column_values(idx).max_by(&:size).size
+      (rs.column_values(idx).max_by(&:size) || '').size
     ].max
   end
   widths
@@ -39,6 +39,6 @@ def sql_print(rs)
   col_widths = rs_col_widths(rs, rs_size)
   sql_print_header(rs, rs_size, col_widths)
   sql_print_rows(rs, rs_size, col_widths)
-  puts "(#{rs.num_tuples} rows)"
+  puts "(#{rs.num_tuples} row#{1 == rs.num_tuples ? '' : 's'})"
   puts
 end
